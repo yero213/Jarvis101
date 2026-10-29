@@ -46,3 +46,14 @@
 - `credentials.json` staat in `.gitignore` (via `credentials*.json`)
 - SESSION_LOG.md gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
 - Sessie afgerond
+
+### Sessie 5 – 29-10-2026
+- `Jarvis_desktop.py` aangemaakt: Tkinter desktop UI voor Jarvis
+  - Chat-interface met Ollama LLM (qwen2.5-coder:7b)
+  - Werkmap-bestandbrowser (list, lezen via dubbelklik)
+  - Statusbalk (Ollama online/offline, model beschikbaar)
+  - Gmail & Drive tools geïntegreerd (gmail_list, gmail_send, drive_list)
+  - Donkere "British assistant"-thema
+  - Zelfde WORKSPACE als Jarvis.py (~//Jarvis/workspace)
+- Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
+- Sessie afgerond
