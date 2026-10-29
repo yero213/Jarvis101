@@ -118,3 +118,15 @@
   - Bij canvas-resize: content-frame wordt meegeschaald via `_on_canvas_resize`
   - Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
 - Sessie afgerond
+
+### Sessie 11 – 29-10-2026
+- **WITTE SCHERM EINDELIJK OPGELOST** — macOS Tk 8.5 probleem
+  - **Oorzaak:** systeem-Tk 8.5 op macOS rendert donkere achtergrondkleuren simpelweg niet
+  - **Oplossing:** Homebrew Python 3.12 + Tk 9.1 gebruiken
+  - Nieuwe venv aangemaakt: `.venv312/` met Homebrew Python 3.12 + ollama
+  - Tk versie in nieuwe venv: **9.1** (modern, rendert dark themes correct)
+  - `start_jarvis.command` aangemaakt: dubbelklik-startscript voor macOS
+  - `.gitignore` bijgewerkt: `.venv312/` toegevoegd
+  - **Start-commando:** `.venv312/bin/python Jarvis_desktop.py`
+  - Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
+- Sessie afgerond
