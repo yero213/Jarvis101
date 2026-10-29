@@ -106,3 +106,15 @@
   - Venster-resize werkt correct (bg_rect, top_bg bijwerken)
   - Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
 - Sessie afgerond
+
+### Sessie 10 – 29-10-2026
+- `Jarvis_desktop.py` opnieuw gefixt: macOS Tkinter-renderingprobleem
+  - **Oorzaak gevonden:** macOS "Aqua"-thema dwingt native widget-kleuren af, waardoor `bg=`-optie op Frames/Canvases wordt genegeerd
+  - **Fix:** `ttk.Style` met `clam`-thema ingesteld — dit thema respecteert wél achtergrondkleuren op macOS
+  - Alle Frames vervangen door `ttk.Frame` met `style="Panel.TFrame"` of `style="TFrame"`
+  - Alle Labels vervangen door `ttk.Label` met aangepaste styles
+  - Knoppen: `ttk.Button` met `style="TButton"` en `style="Send.TButton"`
+  - `hud_canvas` gebruikt `create_window` voor content_frame (correcte stacking)
+  - Bij canvas-resize: content-frame wordt meegeschaald via `_on_canvas_resize`
+  - Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
+- Sessie afgerond

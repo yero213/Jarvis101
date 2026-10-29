@@ -24,6 +24,7 @@ import random
 import threading
 import time
 import tkinter as tk
+from tkinter import ttk
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -329,6 +330,25 @@ class JarvisDesktop(tk.Tk):
         self.minsize(1200, 800)
         self.configure(bg=BG_COLOR)
 
+        # ttk.Style instellen — clam thema respecteert bg-kleuren op macOS
+        style = ttk.Style(self)
+        style.theme_use("clam")
+        style.configure(".", background=BG_COLOR, foreground=TEXT_COLOR, borderwidth=0)
+        style.configure("TFrame", background=BG_COLOR)
+        style.configure("Panel.TFrame", background=PANEL_COLOR)
+        style.configure("TLabel", background=BG_COLOR, foreground=TEXT_COLOR, font=("Consolas", 10))
+        style.configure("Panel.TLabel", background=PANEL_COLOR, foreground=TEXT_COLOR, font=("Consolas", 10))
+        style.configure("Accent.TLabel", background=PANEL_COLOR, fg=ACCENT_COLOR, font=("Courier New", 9, "bold"))
+        style.configure("Title.TLabel", background=PANEL_COLOR, foreground=ACCENT_COLOR, font=("Courier New", 14, "bold"))
+        style.configure("Status.TLabel", background=PANEL_COLOR, foreground=ACCENT_DIM, font=("Courier New", 11, "bold"))
+        style.configure("Time.TLabel", background=PANEL_COLOR, foreground=ACCENT_COLOR, font=("Courier New", 12, "bold"))
+        style.configure("System.TLabel", background=PANEL_COLOR, foreground=TEXT_COLOR, font=("Courier New", 9))
+        style.configure("Bottom.TLabel", background=PANEL_COLOR, foreground=ACCENT_DIM, font=("Courier New", 9))
+        style.configure("TButton", background=PANEL_COLOR, foreground=ACCENT_COLOR, font=("Courier New", 9, "bold"), borderwidth=1)
+        style.map("TButton", background=[("active", ACCENT_COLOR)], foreground=[("active", "#000000")])
+        style.configure("Send.TButton", background=ACCENT_COLOR, foreground="#000000", font=("Courier New", 10, "bold"), borderwidth=0)
+        style.map("Send.TButton", background=[("active", "#00aaff")])
+
         self.history = [{"role": "system", "content": SYSTEM_PROMPT}]
         self._anim_running = True
         self._particles = None
@@ -344,117 +364,86 @@ class JarvisDesktop(tk.Tk):
         self._append_chat("Systeem", f"Werkmap: {WORKSPACE}", "system")
 
     # ------------------------------------------------------------------
-    # HUD layout — alle widgets gebruiken pack(), geen mixing met place/grid
+    # HUD layout — ttk.Frame met clam thema respecteert bg-kleuren op macOS
     # ------------------------------------------------------------------
     def _build_hud(self):
         # Hoofdcontainer — vul het hele venster met donkere achtergrond
-        self.container = tk.Frame(self, bg=BG_COLOR)
+        self.container = ttk.Frame(self, style="TFrame")
         self.container.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
-        self.container.pack_propagate(False)
 
         # Canvas voor deeltjes + scannende lijnen (achterlaag)
         self.hud_canvas = tk.Canvas(
             self.container, bg=BG_COLOR, highlightthickness=0,
         )
         self.hud_canvas.pack(fill=tk.BOTH, expand=True)
-        # Expliciete achtergrondrechthoek tekenen (macOS canvas bg fix)
-        self.hud_canvas.create_rectangle(
-            0, 0, 1500, 950, fill=BG_COLOR, outline=BG_COLOR, tags="bg_rect"
-        )
 
-        # Inhoudsframe bovenop de canvas (transparant effect via bg=BG_COLOR)
-        self.content = tk.Frame(self.hud_canvas, bg=BG_COLOR)
-        self.hud_canvas.create_window(0, 0, window=self.content, anchor="nw", tags="content_window")
+        # Inhoudsframe bovenop de canvas (via create_window voor correcte stacking)
+        self.content = ttk.Frame(self.hud_canvas, style="TFrame")
+        self.content_window = self.hud_canvas.create_window(0, 0, window=self.content, anchor="nw")
         self.content.columnconfigure(1, weight=1)
         self.content.rowconfigure(0, weight=1)
 
         # ---- Top HUD-balk ----
-        self.top_bar = tk.Frame(self.content, bg=PANEL_COLOR, height=70, highlightthickness=1,
-                                highlightbackground=PANEL_BORDER)
+        self.top_bar = ttk.Frame(self.content, style="Panel.TFrame", height=70)
         self.top_bar.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 6))
         self.top_bar.pack_propagate(False)
         self.top_bar.columnconfigure(1, weight=1)
 
-        self.title_label = tk.Label(
-            self.top_bar, text="J.A.R.V.I.S.  v1.0", bg=PANEL_COLOR,
-            fg=ACCENT_COLOR, font=("Courier New", 14, "bold"),
+        self.title_label = ttk.Label(
+            self.top_bar, text="J.A.R.V.I.S.  v1.0", style="Title.TLabel",
         )
         self.title_label.grid(row=0, column=0, padx=20, pady=18, sticky="w")
 
-        self.status_label = tk.Label(
-            self.top_bar, text="STANDBY", bg=PANEL_COLOR, fg=ACCENT_DIM,
-            font=("Courier New", 11, "bold"),
+        self.status_label = ttk.Label(
+            self.top_bar, text="STANDBY", style="Status.TLabel",
         )
         self.status_label.grid(row=0, column=1, padx=20, pady=18, sticky="e")
 
-        self.time_label = tk.Label(
-            self.top_bar, text="00:00:00", bg=PANEL_COLOR, fg=ACCENT_COLOR,
-            font=("Courier New", 12, "bold"),
+        self.time_label = ttk.Label(
+            self.top_bar, text="00:00:00", style="Time.TLabel",
         )
         self.time_label.grid(row=0, column=2, padx=20, pady=18, sticky="e")
         self._tick_clock()
 
-        # Hoekbrackets rond de top bar (getekend op canvas)
-        self.top_canvas = tk.Canvas(
-            self.top_bar, height=70, bg=PANEL_COLOR, highlightthickness=0,
-        )
-        self.top_canvas.place(x=0, y=0, relwidth=1.0)
-        self.top_canvas.create_rectangle(
-            0, 0, 1500, 70, fill=PANEL_COLOR, outline=PANEL_COLOR, tags="top_bg"
-        )
-
         # ---- Hoofdinhoud ----
-        self.main = tk.Frame(self.content, bg=BG_COLOR)
+        self.main = ttk.Frame(self.content, style="TFrame")
         self.main.grid(row=1, column=0, columnspan=2, sticky="nsew")
         self.main.columnconfigure(1, weight=1)
         self.main.rowconfigure(0, weight=1)
 
         # ---- Linker zijbalk: systeem + werkmap ----
-        self.sidebar = tk.Frame(self.main, bg=PANEL_COLOR, width=340, highlightthickness=1,
-                                highlightbackground=PANEL_BORDER)
+        self.sidebar = ttk.Frame(self.main, style="Panel.TFrame", width=340)
         self.sidebar.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         self.sidebar.grid_propagate(False)
 
-        self.sidebar_canvas = tk.Canvas(
-            self.sidebar, bg=PANEL_COLOR, highlightthickness=0,
-        )
-        self.sidebar_canvas.place(x=0, y=0, relwidth=1.0, relheight=1.0)
-        self.sidebar_canvas.create_rectangle(
-            0, 0, 340, 950, fill=PANEL_COLOR, outline=PANEL_COLOR, tags="sidebar_bg"
-        )
-
         # Systeem-meter paneel
-        sys_panel = tk.Frame(self.sidebar, bg=PANEL_COLOR)
+        sys_panel = ttk.Frame(self.sidebar, style="Panel.TFrame")
         sys_panel.pack(fill=tk.X, padx=14, pady=(14, 8))
 
-        tk.Label(
-            sys_panel, text="SYSTEM STATUS", bg=PANEL_COLOR, fg=ACCENT_COLOR,
-            font=("Courier New", 9, "bold"),
+        ttk.Label(
+            sys_panel, text="SYSTEM STATUS", style="Accent.TLabel",
         ).pack(anchor="w", pady=(0, 6))
 
-        gauge_frame = tk.Frame(sys_panel, bg=PANEL_COLOR)
+        gauge_frame = ttk.Frame(sys_panel, style="Panel.TFrame")
         gauge_frame.pack(fill=tk.X)
 
         self.cpu_gauge_canvas = tk.Canvas(gauge_frame, width=100, height=100, bg=PANEL_COLOR, highlightthickness=0)
         self.cpu_gauge_canvas.pack(side=tk.LEFT, padx=(0, 8))
-        self.cpu_label = tk.Label(
-            gauge_frame, text="CPU: --%", bg=PANEL_COLOR, fg=TEXT_COLOR,
-            font=("Courier New", 9),
+        self.cpu_label = ttk.Label(
+            gauge_frame, text="CPU: --%", style="System.TLabel",
         )
         self.cpu_label.pack(side=tk.LEFT, anchor="w")
 
         self.ram_gauge_canvas = tk.Canvas(gauge_frame, width=100, height=100, bg=PANEL_COLOR, highlightthickness=0)
         self.ram_gauge_canvas.pack(side=tk.LEFT, padx=(8, 0))
-        self.ram_label = tk.Label(
-            gauge_frame, text="RAM: --%", bg=PANEL_COLOR, fg=TEXT_COLOR,
-            font=("Courier New", 9),
+        self.ram_label = ttk.Label(
+            gauge_frame, text="RAM: --%", style="System.TLabel",
         )
         self.ram_label.pack(side=tk.LEFT, anchor="w")
 
         # Werkmap-paneel
-        tk.Label(
-            self.sidebar, text="WERKMAP", bg=PANEL_COLOR, fg=ACCENT_COLOR,
-            font=("Courier New", 9, "bold"),
+        ttk.Label(
+            self.sidebar, text="WERKMAP", style="Accent.TLabel",
         ).pack(anchor="w", padx=14, pady=(14, 4))
 
         self.file_list = tk.Listbox(
@@ -465,21 +454,19 @@ class JarvisDesktop(tk.Tk):
         self.file_list.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 8))
         self.file_list.bind("<Double-Button-1>", self._on_file_double_click)
 
-        btn_frame = tk.Frame(self.sidebar, bg=PANEL_COLOR)
+        btn_frame = ttk.Frame(self.sidebar, style="Panel.TFrame")
         btn_frame.pack(fill=tk.X, padx=12, pady=(0, 14))
-        tk.Button(
-            btn_frame, text="VERSCHEN", bg=ACCENT_COLOR, fg="#000000",
-            font=("Courier New", 9, "bold"), borderwidth=0,
+        ttk.Button(
+            btn_frame, text="VERSCHEN", style="TButton",
             command=self._refresh_files,
         ).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 4))
-        tk.Button(
-            btn_frame, text="MAP", bg=PANEL_COLOR, fg=ACCENT_COLOR,
-            font=("Courier New", 9, "bold"), borderwidth=1,
-            highlightbackground=ACCENT_COLOR, command=self._open_workspace,
+        ttk.Button(
+            btn_frame, text="MAP", style="TButton",
+            command=self._open_workspace,
         ).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(4, 0))
 
         # ---- Chat gebied ----
-        self.chat_container = tk.Frame(self.main, bg=BG_COLOR)
+        self.chat_container = ttk.Frame(self.main, style="TFrame")
         self.chat_container.grid(row=0, column=1, sticky="nsew")
         self.chat_container.columnconfigure(0, weight=1)
         self.chat_container.rowconfigure(0, weight=1)
@@ -491,7 +478,7 @@ class JarvisDesktop(tk.Tk):
         self.chat_canvas.grid(row=0, column=0, sticky="nsew")
 
         # Scrollbare chat binnen canvas
-        self.chat_frame = tk.Frame(self.chat_canvas, bg=BG_COLOR)
+        self.chat_frame = ttk.Frame(self.chat_canvas, style="TFrame")
         self.chat_window = self.chat_canvas.create_window(
             (0, 0), window=self.chat_frame, anchor="nw", tags="chat_frame"
         )
@@ -501,8 +488,7 @@ class JarvisDesktop(tk.Tk):
         ))
 
         # ---- Inputbalk ----
-        self.input_bar = tk.Frame(self.container, bg=PANEL_COLOR, height=80, highlightthickness=1,
-                                  highlightbackground=PANEL_BORDER)
+        self.input_bar = ttk.Frame(self.container, style="Panel.TFrame", height=80)
         self.input_bar.pack(side=tk.BOTTOM, fill=tk.X)
         self.input_bar.pack_propagate(False)
         self.input_bar.columnconfigure(0, weight=1)
@@ -517,44 +503,33 @@ class JarvisDesktop(tk.Tk):
         self.entry.bind("<Return>", self._on_enter)
         self.entry.bind("<Shift-Return>", lambda e: "break")
 
-        self.send_btn = tk.Button(
-            self.input_bar, text="SEND", bg=ACCENT_COLOR, fg="#000000",
-            font=("Courier New", 10, "bold"), borderwidth=0,
+        self.send_btn = ttk.Button(
+            self.input_bar, text="SEND", style="Send.TButton",
             command=self._send_message,
         )
         self.send_btn.pack(side=tk.RIGHT, padx=14, pady=12)
 
         # ---- Onderste statusbalk ----
-        self.bottom_bar = tk.Frame(self.container, bg=PANEL_COLOR, height=34, highlightthickness=1,
-                                   highlightbackground=PANEL_BORDER)
+        self.bottom_bar = ttk.Frame(self.container, style="Panel.TFrame", height=34)
         self.bottom_bar.pack(side=tk.BOTTOM, fill=tk.X)
         self.bottom_bar.pack_propagate(False)
 
-        self.bottom_status = tk.Label(
-            self.bottom_bar, text="READY", bg=PANEL_COLOR, fg=ACCENT_DIM,
-            font=("Courier New", 9),
+        self.bottom_status = ttk.Label(
+            self.bottom_bar, text="READY", style="Bottom.TLabel",
         )
         self.bottom_status.pack(side=tk.LEFT, padx=14, pady=7)
 
-        self.ollama_status = tk.Label(
-            self.bottom_bar, text="OLLAMA: --", bg=PANEL_COLOR, fg=ACCENT_DIM,
-            font=("Courier New", 9),
+        self.ollama_status = ttk.Label(
+            self.bottom_bar, text="OLLAMA: --", style="Bottom.TLabel",
         )
         self.ollama_status.pack(side=tk.RIGHT, padx=14, pady=7)
 
-        # Initialiseren van canvas-achtergrond bij resize
-        self.container.bind("<Configure>", self._on_resize)
+        # Bij resize: content-window aanpassen
+        self.hud_canvas.bind("<Configure>", self._on_canvas_resize)
 
-    def _on_resize(self, event):
-        """Bij venster-resize: achtergrondrechthoek bijwerken."""
-        w = event.width
-        h = event.height
-        self.hud_canvas.coords("bg_rect", 0, 0, w, h)
-        self.top_canvas.coords("top_bg", 0, 0, w, 70)
-        self.top_canvas.delete("hud")
-        draw_corner_brackets(
-            self.top_canvas, 0, 0, w, 70, size=24, color=ACCENT_COLOR, width=2, tag="hud"
-        )
+    def _on_canvas_resize(self, event):
+        """Canvas resize: content-frame meeschalen."""
+        self.hud_canvas.itemconfig(self.content_window, width=event.width, height=event.height)
 
     # ------------------------------------------------------------------
     # HUD animatie
@@ -574,22 +549,13 @@ class JarvisDesktop(tk.Tk):
         if w < 10 or h < 10:
             return
 
-        # Wis alleen HUD-laag, niet de achtergrond
+        # Wis alleen HUD-laag, niet de deeltjes
         self.hud_canvas.delete("hud")
 
-        # Scannende lijn over de top bar
+        # Scannende lijn over de top bar (70px hoog)
         t = time.time() * 4
         y = int((math.sin(t) + 1) / 2 * (70 - 4)) + 2
         self.hud_canvas.create_line(4, y, w - 4, y, fill=ACCENT_COLOR, width=1, tags="hud")
-
-        # Zijbalk hoekbrackets
-        sw = self.sidebar_canvas.winfo_width()
-        sh = self.sidebar_canvas.winfo_height()
-        if sw > 10 and sh > 10:
-            self.sidebar_canvas.delete("hud")
-            draw_corner_brackets(
-                self.sidebar_canvas, 0, 0, sw, sh, size=16, color=ACCENT_COLOR, width=1, tag="hud"
-            )
 
         # Deeltjes updaten en tekenen
         if self._particles:
@@ -611,7 +577,7 @@ class JarvisDesktop(tk.Tk):
         self.chat_canvas.itemconfig(self.chat_window, width=event.width)
 
     def _append_chat(self, sender: str, text: str, tag: str):
-        bubble = tk.Frame(self.chat_frame, bg=BG_COLOR)
+        bubble = ttk.Frame(self.chat_frame, style="TFrame")
         bubble.pack(fill=tk.X, padx=20, pady=(8, 2), anchor="e" if tag == "user" else "w")
 
         # Naamlabel
@@ -644,8 +610,8 @@ class JarvisDesktop(tk.Tk):
         self.chat_canvas.yview_moveto(1.0)
 
     def _set_status(self, text: str, color=ACCENT_COLOR):
-        self.status_label.config(text=text, fg=color)
-        self.bottom_status.config(text=text, fg=color)
+        self.status_label.config(text=text, foreground=color)
+        self.bottom_status.config(text=text, foreground=color)
 
     # ------------------------------------------------------------------
     # Acties
@@ -737,20 +703,20 @@ class JarvisDesktop(tk.Tk):
         def check():
             try:
                 if ollama_client is None:
-                    self.after(0, lambda: self.ollama_status.config(text="OLLAMA: OFF", fg=DANGER_COLOR))
+                    self.after(0, lambda: self.ollama_status.config(text="OLLAMA: OFF", foreground=DANGER_COLOR))
                     self.after(0, lambda: self._set_status("Ollama niet geïnstalleerd", DANGER_COLOR))
                     return
                 tags = ollama_client.list()
                 models = [m["model"] for m in tags.get("models", [])]
                 available = any(LLM_MODEL in m for m in models)
                 if available:
-                    self.after(0, lambda: self.ollama_status.config(text=f"OLLAMA: {LLM_MODEL}", fg=OK_COLOR))
+                    self.after(0, lambda: self.ollama_status.config(text=f"OLLAMA: {LLM_MODEL}", foreground=OK_COLOR))
                     self.after(0, lambda: self._set_status("SYSTEMS ONLINE", OK_COLOR))
                 else:
-                    self.after(0, lambda: self.ollama_status.config(text="OLLAMA: MODEL MISSING", fg=DANGER_COLOR))
+                    self.after(0, lambda: self.ollama_status.config(text="OLLAMA: MODEL MISSING", foreground=DANGER_COLOR))
                     self.after(0, lambda: self._set_status(f"Model {LLM_MODEL} niet gevonden", DANGER_COLOR))
             except Exception:
-                self.after(0, lambda: self.ollama_status.config(text="OLLAMA: OFFLINE", fg=DANGER_COLOR))
+                self.after(0, lambda: self.ollama_status.config(text="OLLAMA: OFFLINE", foreground=DANGER_COLOR))
                 self.after(0, lambda: self._set_status("Ollama niet bereikbaar", DANGER_COLOR))
 
         threading.Thread(target=check, daemon=True).start()
