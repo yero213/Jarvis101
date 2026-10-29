@@ -1,0 +1,1 @@
+@"C:\Users\yero.beeusaert\OneDrive - vzw Scholen Molenland\Documenten\own code projects\Jarvis\.venv\Scripts\jarvis-python.exe" Jarvis.py %*

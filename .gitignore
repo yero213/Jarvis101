@@ -1,0 +1,57 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+var/
+sdist/
+dist-info/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Virtual environment ---
+.venv/
+venv/
+ENV/
+env/
+
+# --- IDE / editor ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- Environment & secrets (NOOIT committen!) ---
+.env
+.env.local
+.env.*.local
+credentials.json
+credentials*.json
+*.secret
+
+# --- Jarvis project specific ---
+kokoro-v1.0.onnx
+voices-v1.0.bin
+*.onnx
+*.bin
+projectstatus-*.json
+
+# --- Logs ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
