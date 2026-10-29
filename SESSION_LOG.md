@@ -37,3 +37,12 @@
 - Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
 - `.env` (met API-key) blijft lokaal, staat in `.gitignore`
 - Sessie afgerond
+
+### Sessie 4 – 29-10-2026
+- `credentials.json.json` hernoemd naar `credentials.json` (Google OAuth client secrets)
+- Google API libraries geïnstalleerd: google-auth, google-auth-oauthlib, google-auth-httplib2, google-api-python-client
+- Gmail & Drive OAuth flow getest: verbinding werkt, 3 recente berichten opgehaald
+- Token opgeslagen in `~/.jarvis_token.json` (buiten projectmap, nooit naar GitHub)
+- `credentials.json` staat in `.gitignore` (via `credentials*.json`)
+- SESSION_LOG.md gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
+- Sessie afgerond
