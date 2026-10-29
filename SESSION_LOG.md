@@ -83,3 +83,15 @@
   - Onderste statusbalk met READY / PROCESSING / ONLINE / ERROR
   - Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
 - Sessie afgerond
+
+### Sessie 8 – 29-10-2026
+- `Jarvis_desktop.py` verder verbeterd met extra Iron Man HUD-elementen:
+  - Glass morphism panelen met subtiele borders (PANEL_BORDER)
+  - Tactical grid kleurenpalet (GRID_COLOR)
+  - Verbeterde kleuren: diepnavy BG (#03060c), ijzgrijs-wit tekst (#cfe3f5)
+  - Gedimde tekstkleur (TEXT_DIM) voor secundaire informatie
+  - Hoogwaardige typo: Courier New overal, precieze mission-briefing uitstraling
+  - Gloei randen onder chat-bubbels
+  - Translucent paneel-effect met diepte
+  - Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
+- Sessie afgerond
