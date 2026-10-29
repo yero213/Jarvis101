@@ -57,3 +57,16 @@
   - Zelfde WORKSPACE als Jarvis.py (~//Jarvis/workspace)
 - Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
 - Sessie afgerond
+
+### Sessie 6 – 29-10-2026
+- `Jarvis_desktop.py` herwerkt naar Iron Man-geïnspireerde HUD UI:
+  - Diepzwarte achtergrond met neon-cyaan accenten (#00e5ff)
+  - HUD-hoekjes en scannen lijnen in top- en sidebalk (geanimeerd)
+  - Chat-bubbels met holografische randen en naamlabels
+  - Donkere chat-tekstbal met Consolas font
+  - Statusbalk: STANDBY / PROCESSING / ONLINE / ERROR met kleurindicatie
+  - Ollama status indicator (ONLINE / OFFLINE / MODEL MISSING)
+  - Werkmap-sidebar met vernieuwde HUD-stijl
+  - Send-knop in accentkleur
+- Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
+- Sessie afgerond

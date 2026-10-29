@@ -1,24 +1,17 @@
-"""J.A.R.V.I.S. - Desktop UI (Tkinter)
+"""J.A.R.V.I.S. — Iron Man geïnspireerde desktop UI (Tkinter)
 
-Chat-interface voor de Jarvis-assistent, met dezelfde workspace als Jarvis.py.
-Werkt met Ollama (lokaal) voor de LLM-antwoorden.
-
-Gebruik:
-    python Jarvis_desktop.py
-
-Vereisten:
-    pip install ollama
-    (optioneel) google-auth google-auth-oauthlib google-api-python-client  voor Gmail/Drive
+Holografische HUD-stijl chat-interface met Ollama LLM.
 """
 import os
 import sys
 import threading
+import time
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox, filedialog
+from tkinter import ttk, messagebox
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Werkmap (zelfde sandbox als Jarvis.py)
+# Configuratie
 # ---------------------------------------------------------------------------
 WORKSPACE = Path.home() / "Jarvis" / "workspace"
 WORKSPACE.mkdir(parents=True, exist_ok=True)
@@ -26,17 +19,26 @@ WORKSPACE.mkdir(parents=True, exist_ok=True)
 LLM_MODEL = "qwen2.5-coder:7b"
 OLLAMA_HOST = "http://localhost:11434"
 
+# Kleurenpalet (Iron Man / Jarvis hologram)
+BG_COLOR = "#050508"           # Diepzwart / nachtblauw
+PANEL_COLOR = "#0a0a12"       # Panel donker
+ACCENT_COLOR = "#00e5ff"      # Cyaan neon
+ACCENT_DIM = "#007a9e"        # Gedimd cyaan
+TEXT_COLOR = "#e0e0e0"        # Lichtgrijs
+DANGER_COLOR = "#ff4444"      # Rood voor fouten
+OK_COLOR = "#44ff88"          # Groen voor online
+
 # ---------------------------------------------------------------------------
 # Ollama client
 # ---------------------------------------------------------------------------
 try:
     from ollama import Client as OllamaClient
     ollama_client = OllamaClient(host=OLLAMA_HOST)
-except Exception:  # ollama niet geïnstalleerd of niet draaiend
+except Exception:
     ollama_client = None
 
 # ---------------------------------------------------------------------------
-# Google OAuth helpers (zelfde scopespakket als Jarvis.py)
+# Google OAuth helpers (zelfde als Jarvis.py)
 # ---------------------------------------------------------------------------
 GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
@@ -47,7 +49,6 @@ GOOGLE_SCOPES = [
 
 
 def _google_creds():
-    """OAuth2 credentials voor Gmail en Drive."""
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
     from google.auth.transport.requests import Request
@@ -138,7 +139,7 @@ def append_file(filename: str, content: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Gmail / Drive (alleen als libraries geïnstalleerd zijn)
+# Gmail / Drive
 # ---------------------------------------------------------------------------
 def gmail_list(query: str = "is:unread", max_results: int = 5) -> str:
     try:
@@ -208,145 +209,262 @@ SYSTEM_PROMPT = (
 
 
 # ---------------------------------------------------------------------------
-# Desktop UI
+# HUD Canvas helpers
+# ---------------------------------------------------------------------------
+def draw_corner(canvas, x, y, w, h, size=20, color=ACCENT_COLOR, width=2):
+    """Teken HUD-hoekjes (Iron Man stijl)."""
+    # Top-left
+    canvas.create_line(x, y + size, x, y, width=width, fill=color, tags="hud")
+    canvas.create_line(x, y, x + size, y, width=width, fill=color, tags="hud")
+    # Top-right
+    canvas.create_line(x + w - size, y, x + w, y, width=width, fill=color, tags="hud")
+    canvas.create_line(x + w, y, x + w, y + size, width=width, fill=color, tags="hud")
+    # Bottom-left
+    canvas.create_line(x, y + h - size, x, y + h, width=width, fill=color, tags="hud")
+    canvas.create_line(x, y + h, x + size, y + h, width=width, fill=color, tags="hud")
+    # Bottom-right
+    canvas.create_line(x + w - size, y + h, x + w, y + h, width=width, fill=color, tags="hud")
+    canvas.create_line(x + w, y + h - size, x + w, y + h, width=width, fill=color, tags="hud")
+
+
+# ---------------------------------------------------------------------------
+# Hoofdapplicatie
 # ---------------------------------------------------------------------------
 class JarvisDesktop(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("J.A.R.V.I.S. — Desktop")
-        self.geometry("900x650")
-        self.minsize(700, 500)
+        self.title("J.A.R.V.I.S. — HUD Interface")
+        self.geometry("1200x800")
+        self.minsize(1000, 700)
+        self.configure(bg=BG_COLOR)
 
-        self._setup_theme()
-        self._build_layout()
-
-        # Status controleren bij opstart
-        self._check_ollama()
-        self._refresh_files()
-
-        # Geschiedenis voor de LLM
         self.history = [{"role": "system", "content": SYSTEM_PROMPT}]
+        self._anim_running = True
+        self._build_hud()
+        self._start_hud_animation()
+
+        # Startup checks
+        self.after(500, self._check_ollama)
+        self.after(800, self._refresh_files)
+
+        self._append_chat("J.A.R.V.I.S.", "Systems online, Sir. HUD interface active.", "jarvis")
+        self._append_chat("Systeem", f"Werkmap: {WORKSPACE}", "system")
 
     # ------------------------------------------------------------------
-    # Opmaak
+    # HUD layout
     # ------------------------------------------------------------------
-    def _setup_theme(self):
-        style = ttk.Style(self)
-        style.theme_use("clam")
-        # Donkere, britse assistent-kleuren
-        self.configure(bg="#1e1e1e")
-        style.configure("TFrame", background="#1e1e1e")
-        style.configure("TLabel", background="#1e1e1e", foreground="#d4d4d4", font=("Segoe UI", 10))
-        style.configure("Title.TLabel", font=("Segoe UI Semibold", 13, "bold"), foreground="#c7c7c7")
-        style.configure("Status.TLabel", font=("Segoe UI", 9), foreground="#888888")
-        style.configure("TButton", font=("Segoe UI", 10), padding=6)
-        style.configure("Send.TButton", font=("Segoe UI", 10, "bold"))
-        style.configure("Treeview", background="#2d2d2d", fieldbackground="#2d2d2d",
-                        foreground="#d4d4d4", borderwidth=0)
-        style.configure("Treeview.Heading", background="#3a3a3a", foreground="#c7c7c7",
-                        font=("Segoe UI", 9, "bold"))
-        style.map("Treeview", background=[("selected", "#3a7ca5")])
+    def _build_hud(self):
+        # Hoofdcontainer met donkere achtergrond
+        self.container = tk.Frame(self, bg=BG_COLOR)
+        self.container.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
-    # ------------------------------------------------------------------
-    # Layout
-    # ------------------------------------------------------------------
-    def _build_layout(self):
-        # Hoofdcontainer
-        container = ttk.Frame(self)
-        container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        container.columnconfigure(1, weight=1)
-        container.rowconfigure(0, weight=1)
+        # Bovenste HUD-balk
+        self.top_bar = tk.Frame(self.container, bg=PANEL_COLOR, height=60)
+        self.top_bar.pack(fill=tk.X, pady=(0, 4))
+        self.top_bar.pack_propagate(False)
+
+        # Titel links
+        self.title_label = tk.Label(
+            self.top_bar, text="J.A.R.V.I.S.  v1.0", bg=PANEL_COLOR,
+            fg=ACCENT_COLOR, font=("Courier New", 14, "bold"),
+        )
+        self.title_label.pack(side=tk.LEFT, padx=16, pady=15)
+
+        # Status rechts
+        self.status_label = tk.Label(
+            self.top_bar, text="STANDBY", bg=PANEL_COLOR, fg=ACCENT_DIM,
+            font=("Courier New", 11, "bold"),
+        )
+        self.status_label.pack(side=tk.RIGHT, padx=20, pady=15)
+
+        # Hoekjes om de top bar
+        self.top_canvas = tk.Canvas(
+            self.top_bar, height=60, bg=PANEL_COLOR, highlightthickness=0,
+        )
+        self.top_canvas.place(x=0, y=0, relwidth=1.0)
+
+        # Hoofdinhoud: links bestandbrowser, rechts chat
+        self.content = tk.Frame(self.container, bg=BG_COLOR)
+        self.content.pack(fill=tk.BOTH, expand=True)
+        self.content.columnconfigure(1, weight=1)
+        self.content.rowconfigure(0, weight=1)
 
         # ---- Sidebar: werkmap ----
-        sidebar = ttk.Frame(container, width=220)
-        sidebar.grid(row=0, column=0, sticky="ns", padx=(0, 8))
-        sidebar.grid_propagate(False)
+        self.sidebar = tk.Frame(self.content, bg=PANEL_COLOR, width=260)
+        self.sidebar.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+        self.sidebar.grid_propagate(False)
 
-        ttk.Label(sidebar, text="Werkmap", style="Title.TLabel").pack(anchor="w", pady=(0, 6))
+        self.sidebar_canvas = tk.Canvas(
+            self.sidebar, bg=PANEL_COLOR, highlightthickness=0,
+        )
+        self.sidebar_canvas.place(x=0, y=0, relwidth=1.0, relheight=1.0)
+
+        tk.Label(
+            self.sidebar, text="WERKMAP", bg=PANEL_COLOR, fg=ACCENT_COLOR,
+            font=("Courier New", 10, "bold"),
+        ).pack(anchor="w", padx=12, pady=(10, 4))
 
         self.file_list = tk.Listbox(
-            sidebar, bg="#2d2d2d", fg="#d4d4d4", selectbackground="#3a7ca5",
-            selectforeground="white", borderwidth=0, highlightthickness=0,
-            font=("Consolas", 9), activestyle="none",
+            self.sidebar, bg=BG_COLOR, fg=TEXT_COLOR, selectbackground=ACCENT_COLOR,
+            selectforeground="#000000", borderwidth=0, highlightthickness=0,
+            font=("Consolas", 9), activestyle="none", highlightcolor=ACCENT_COLOR,
         )
-        self.file_list.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
+        self.file_list.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
         self.file_list.bind("<Double-Button-1>", self._on_file_double_click)
 
-        btn_frame = ttk.Frame(sidebar)
-        btn_frame.pack(fill=tk.X)
-        ttk.Button(btn_frame, text="Ververs", command=self._refresh_files).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 3))
-        ttk.Button(btn_frame, text="Open map", command=self._open_workspace).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(3, 0))
+        btn_frame = tk.Frame(self.sidebar, bg=PANEL_COLOR)
+        btn_frame.pack(fill=tk.X, padx=8, pady=(0, 10))
+        tk.Button(
+            btn_frame, text="Ververs", bg=ACCENT_COLOR, fg="#000000",
+            font=("Courier New", 9, "bold"), borderwidth=0,
+            command=self._refresh_files,
+        ).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 4))
+        tk.Button(
+            btn_frame, text="Map", bg=PANEL_COLOR, fg=ACCENT_COLOR,
+            font=("Courier New", 9, "bold"), borderwidth=1,
+            highlightbackground=ACCENT_COLOR, command=self._open_workspace,
+        ).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(4, 0))
 
-        # ---- Chatgebied ----
-        chat_container = ttk.Frame(container)
-        chat_container.grid(row=0, column=1, sticky="nsew")
-        chat_container.columnconfigure(0, weight=1)
-        chat_container.rowconfigure(0, weight=1)
+        # ---- Chat gebied ----
+        self.chat_container = tk.Frame(self.content, bg=BG_COLOR)
+        self.chat_container.grid(row=0, column=1, sticky="nsew")
+        self.chat_container.columnconfigure(0, weight=1)
+        self.chat_container.rowconfigure(0, weight=1)
 
-        self.chat = scrolledtext.ScrolledText(
-            chat_container, wrap=tk.WORD, bg="#252526", fg="#d4d4d4",
-            insertbackground="#ffffff", selectbackground="#3a7ca5",
-            borderwidth=0, highlightthickness=0, font=("Segoe UI", 11),
-            padx=12, pady=12,
+        # Chat canvas met HUD-lijst
+        self.chat_canvas = tk.Canvas(
+            self.chat_container, bg=BG_COLOR, highlightthickness=0,
         )
-        self.chat.grid(row=0, column=0, sticky="nsew")
-        self.chat.configure(state=tk.DISABLED)
+        self.chat_canvas.grid(row=0, column=0, sticky="nsew")
 
-        # Chat-tags
-        self.chat.tag_configure("jarvis", foreground="#569cd6", font=("Segoe UI", 11, "bold"))
-        self.chat.tag_configure("user", foreground="#ce9178", font=("Segoe UI", 11, "bold"))
-        self.chat.tag_configure("system", foreground="#888888", font=("Segoe UI", 9, "italic"))
-        self.chat.tag_configure("error", foreground="#f48771")
+        # Scrollbare chat binnen canvas
+        self.chat_frame = tk.Frame(self.chat_canvas, bg=BG_COLOR)
+        self.chat_window = self.chat_canvas.create_window(
+            (0, 0), window=self.chat_frame, anchor="nw", tags="chat_frame"
+        )
+        self.chat_canvas.bind("<Configure>", self._on_chat_configure)
+        self.chat_frame.bind("<Configure>", lambda e: self.chat_canvas.configure(
+            scrollregion=self.chat_canvas.bbox("all")
+        ))
 
         # ---- Inputbalk ----
-        input_container = ttk.Frame(chat_container)
-        input_container.grid(row=1, column=0, sticky="ew", pady=(8, 0))
-        input_container.columnconfigure(0, weight=1)
+        self.input_bar = tk.Frame(self.container, bg=PANEL_COLOR, height=70)
+        self.input_bar.pack(fill=tk.X, pady=(4, 0))
+        self.input_bar.pack_propagate(False)
 
         self.entry = tk.Text(
-            input_container, height=3, bg="#333333", fg="#ffffff",
-            insertbackground="#ffffff", borderwidth=0, highlightthickness=1,
-            highlightbackground="#444444", font=("Segoe UI", 10),
-            padx=8, pady=6,
+            self.input_bar, height=3, bg=BG_COLOR, fg=TEXT_COLOR,
+            insertbackground=ACCENT_COLOR, borderwidth=0, highlightthickness=1,
+            highlightbackground=ACCENT_DIM, highlightcolor=ACCENT_COLOR,
+            font=("Consolas", 11), padx=12, pady=10,
         )
-        self.entry.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        self.entry.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=12, pady=10)
         self.entry.bind("<Return>", self._on_enter)
-        self.entry.bind("<Shift-Return>", lambda e: "break")  # Shift+Enter = nieuwe regel
+        self.entry.bind("<Shift-Return>", lambda e: "break")
 
-        btns = ttk.Frame(input_container)
-        btns.grid(row=0, column=1, sticky="ns")
-        ttk.Button(btns, text="Verstuur", style="Send.TButton", command=self._send_message).pack(side=tk.RIGHT, padx=(0, 2))
-        ttk.Button(btns, text="Wis", command=self._clear_chat).pack(side=tk.RIGHT)
+        self.send_btn = tk.Button(
+            self.input_bar, text="SEND", bg=ACCENT_COLOR, fg="#000000",
+            font=("Courier New", 10, "bold"), borderwidth=0,
+            command=self._send_message,
+        )
+        self.send_btn.pack(side=tk.RIGHT, padx=12, pady=12)
 
-        # ---- Statusbalk ----
-        self.status_var = tk.StringVar(value="Klaar")
-        status = ttk.Label(self, textvariable=self.status_var, style="Status.TLabel", anchor="w")
-        status.pack(fill=tk.X, padx=10, pady=(4, 0))
+        # Onderste statusbalk
+        self.bottom_bar = tk.Frame(self.container, bg=PANEL_COLOR, height=30)
+        self.bottom_bar.pack(fill=tk.X, side=tk.BOTTOM)
+        self.bottom_bar.pack_propagate(False)
 
-        # Welkomstbericht
-        self._append_chat("J.A.R.V.I.S.", "Goedendag, Sir. Hoe kan ik u van dienst zijn?", "jarvis")
-        self._append_chat("Systeem", f"Werkmap: {WORKSPACE}", "system")
+        self.bottom_status = tk.Label(
+            self.bottom_bar, text="READY", bg=PANEL_COLOR, fg=ACCENT_DIM,
+            font=("Courier New", 9),
+        )
+        self.bottom_status.pack(side=tk.LEFT, padx=12, pady=6)
+
+        self.ollama_status = tk.Label(
+            self.bottom_bar, text="OLLAMA: --", bg=PANEL_COLOR, fg=ACCENT_DIM,
+            font=("Courier New", 9),
+        )
+        self.ollama_status.pack(side=tk.RIGHT, padx=12, pady=6)
+
+    # ------------------------------------------------------------------
+    # HUD animatie
+    # ------------------------------------------------------------------
+    def _start_hud_animation(self):
+        if not self._anim_running:
+            return
+        self._draw_hud_elements()
+        self.after(100, self._start_hud_animation)
+
+    def _draw_hud_elements(self):
+        # Top bar hoekjes + scanning lines
+        self.top_canvas.delete("hud")
+        w = self.top_canvas.winfo_width()
+        h = self.top_canvas.winfo_height()
+        if w < 10 or h < 10:
+            return
+        c = ACCENT_COLOR
+        draw_corner(self.top_canvas, 0, 0, w, h, size=24, color=c, width=2)
+
+        # Scanning lijn die beweegt
+        t = time.time() * 3
+        y = int((math.sin(t) + 1) / 2 * (h - 4)) + 2
+        self.top_canvas.create_line(4, y, w - 4, y, fill=c, width=1, tags="hud")
+
+        # Sidebar hoekjes
+        self.sidebar_canvas.delete("hud")
+        sw = self.sidebar_canvas.winfo_width()
+        sh = self.sidebar_canvas.winfo_height()
+        if sw > 10 and sh > 10:
+            draw_corner(self.sidebar_canvas, 0, 0, sw, sh, size=16, color=c, width=1)
 
     # ------------------------------------------------------------------
     # Chat helpers
     # ------------------------------------------------------------------
-    def _append_chat(self, sender: str, text: str, tag: str):
-        self.chat.configure(state=tk.NORMAL)
-        self.chat.insert(tk.END, f"{sender}: ", (tag, "bold" if tag in ("jarvis", "user") else ""))
-        self.chat.insert(tk.END, text + "\n\n")
-        self.chat.configure(state=tk.DISABLED)
-        self.chat.see(tk.END)
+    def _on_chat_configure(self, event):
+        self.chat_canvas.itemconfig(self.chat_window, width=event.width)
 
-    def _set_status(self, text: str):
-        self.status_var.set(text)
-        self.update_idletasks()
+    def _append_chat(self, sender: str, text: str, tag: str):
+        bubble = tk.Frame(self.chat_frame, bg=BG_COLOR)
+        bubble.pack(fill=tk.X, padx=16, pady=(6, 2), anchor="e" if tag == "user" else "w")
+
+        # Naamlabel
+        name_color = ACCENT_COLOR if tag == "jarvis" else TEXT_COLOR
+        name_lbl = tk.Label(
+            bubble, text=sender, bg=BG_COLOR, fg=name_color,
+            font=("Courier New", 9, "bold"), anchor="w",
+        )
+        name_lbl.pack(fill=tk.X)
+
+        # Tekstbal
+        bubble_bg = PANEL_COLOR if tag == "jarvis" else "#12121a"
+        text_lbl = tk.Label(
+            bubble, text=text, bg=bubble_bg, fg=TEXT_COLOR,
+            font=("Consolas", 10), anchor="w", justify=tk.LEFT,
+            padx=12, pady=10, wraplength=700,
+        )
+        text_lbl.pack(fill=tk.X, pady=(2, 0))
+
+        # Hoekjes om de bubble
+        cb = tk.Canvas(bubble, height=4, bg=BG_COLOR, highlightthickness=0)
+        cb.pack(fill=tk.X)
+        cb.create_line(0, 2, 120, 2, fill=ACCENT_COLOR, width=1)
+        cb.create_line(580, 2, 700, 2, fill=ACCENT_COLOR, width=1)
+
+        self._scroll_to_bottom()
+
+    def _scroll_to_bottom(self):
+        self.chat_canvas.update_idletasks()
+        self.chat_canvas.yview_moveto(1.0)
+
+    def _set_status(self, text: str, color=ACCENT_COLOR):
+        self.status_label.config(text=text, fg=color)
+        self.bottom_status.config(text=text, fg=color)
 
     # ------------------------------------------------------------------
     # Acties
     # ------------------------------------------------------------------
     def _on_enter(self, event):
-        # Gewone Enter = verstuur, Shift+Enter = nieuwe regel (afgehandeld via bind)
         self._send_message()
         return "break"
 
@@ -356,14 +474,14 @@ class JarvisDesktop(tk.Tk):
             return
         self.entry.delete("1.0", tk.END)
         self._append_chat("Jij", user_text, "user")
-        self._set_status("Jarvis denkt na...")
+        self._set_status("PROCESSING...", ACCENT_COLOR)
         threading.Thread(target=self._llm_reply, args=(user_text,), daemon=True).start()
 
     def _llm_reply(self, prompt: str):
         try:
             if ollama_client is None:
                 self.after(0, lambda: self._append_chat("Systeem", "Ollama client niet beschikbaar. Installeer met: pip install ollama", "error"))
-                self.after(0, lambda: self._set_status("Klaar"))
+                self.after(0, lambda: self._set_status("ERROR", DANGER_COLOR))
                 return
 
             self.history.append({"role": "user", "content": prompt})
@@ -377,15 +495,14 @@ class JarvisDesktop(tk.Tk):
             self.history.append({"role": "assistant", "content": reply})
 
             self.after(0, lambda: self._append_chat("J.A.R.V.I.S.", reply, "jarvis"))
-            self.after(0, lambda: self._set_status("Klaar"))
+            self.after(0, lambda: self._set_status("ONLINE", OK_COLOR))
         except Exception as exc:
             self.after(0, lambda: self._append_chat("Systeem", f"Fout: {exc}", "error"))
-            self.after(0, lambda: self._set_status("Klaar"))
+            self.after(0, lambda: self._set_status("ERROR", DANGER_COLOR))
 
     def _clear_chat(self):
-        self.chat.configure(state=tk.NORMAL)
-        self.chat.delete("1.0", tk.END)
-        self.chat.configure(state=tk.DISABLED)
+        for widget in self.chat_frame.winfo_children():
+            widget.destroy()
         self.history = [{"role": "system", "content": SYSTEM_PROMPT}]
         self._append_chat("J.A.R.V.I.S.", "Chat gewist, Sir. Hoe kan ik u helpen?", "jarvis")
 
@@ -406,10 +523,9 @@ class JarvisDesktop(tk.Tk):
         if not selection:
             return
         line = self.file_list.get(selection[0])
-        # Bestandsnaam eruit halen (voor mappen staat er een / achter)
         name = line.split(" (")[0].rstrip("/")
         if name.endswith("/"):
-            self._refresh_files()  # map-dubbelklik: herladen (submap-navigatie later uitbreiden)
+            self._refresh_files()
             return
         try:
             content = read_file(name)
@@ -435,20 +551,30 @@ class JarvisDesktop(tk.Tk):
         def check():
             try:
                 if ollama_client is None:
-                    self.after(0, lambda: self._set_status("Ollama client niet geïnstalleerd"))
+                    self.after(0, lambda: self.ollama_status.config(text="OLLAMA: OFF", fg=DANGER_COLOR))
+                    self.after(0, lambda: self._set_status("Ollama niet geïnstalleerd", DANGER_COLOR))
                     return
                 tags = ollama_client.list()
                 models = [m["model"] for m in tags.get("models", [])]
                 available = any(LLM_MODEL in m for m in models)
                 if available:
-                    self.after(0, lambda: self._set_status(f"Ollama online — model {LLM_MODEL} klaar"))
+                    self.after(0, lambda: self.ollama_status.config(text=f"OLLAMA: {LLM_MODEL}", fg=OK_COLOR))
+                    self.after(0, lambda: self._set_status("SYSTEMS ONLINE", OK_COLOR))
                 else:
-                    self.after(0, lambda: self._set_status(f"Ollama online, maar {LLM_MODEL} niet gevonden (beschikbaar: {', '.join(models) or 'geen'})"))
+                    self.after(0, lambda: self.ollama_status.config(text="OLLAMA: MODEL MISSING", fg=DANGER_COLOR))
+                    self.after(0, lambda: self._set_status(f"Model {LLM_MODEL} niet gevonden", DANGER_COLOR))
             except Exception:
-                self.after(0, lambda: self._set_status("Ollama niet bereikbaar op localhost:11434"))
+                self.after(0, lambda: self.ollama_status.config(text="OLLAMA: OFFLINE", fg=DANGER_COLOR))
+                self.after(0, lambda: self._set_status("Ollama niet bereikbaar", DANGER_COLOR))
 
         threading.Thread(target=check, daemon=True).start()
 
+    def destroy(self):
+        self._anim_running = False
+        super().destroy()
+
+
+import math  # noqa: E402  (nodig voor de HUD-animatie)
 
 if __name__ == "__main__":
     app = JarvisDesktop()
