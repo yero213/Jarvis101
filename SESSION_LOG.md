@@ -20,3 +20,9 @@
 - Bestanden toegevoegd: `.gitignore`, `.env.example`, `Jarvis.py`, `Jarvis_debug.py`, `Jarvis_gemini.py`, `run.bat`
 - Secrets bewust uitgesloten: `.env`, `credentials.json.json`, `.venv/`, `__pycache__/`, `kokoro-v1.0.onnx`, `voices-v1.0.bin`, `projectstatus-*.json`
 - Remote ingesteld op `https://github.com/yero213/Jarvis101.git` (token verwijderd uit remote-config)
+
+### Sessie 2 – 29-10-2026
+- `SESSION_LOG.md` aangemaakt met werkafspraken per sessie (start: pull, einde: samenvatting + commit + push)
+- Git pull gedaan: repo was up to date
+- Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
+- Sessie afgerond
