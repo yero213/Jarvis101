@@ -1,13 +1,27 @@
-"""J.A.R.V.I.S. — Iron Man geïnspireerde desktop UI (Tkinter)
+"""J.A.R.V.I.S. — Iron Man geïnspireerde HUD desktop UI (Tkinter)
 
-Holografische HUD-stijl chat-interface met Ollama LLM.
+Holografische HUD met:
+- Geanimeerde zwevende deeltjes-achtergrond
+- Cirkelvormige HUD-meters (tijd, systeemstatus)
+- Hoekbrackets op alle panelen
+- Scannende radarlijnen
+- Holografische chat-bubbels met gloeiende randen
+- Stark Industries / J.A.R.V.I.S. branding
+
+Gebruik:
+    python3 Jarvis_desktop.py
+
+Vereisten:
+    pip install ollama
+    (optioneel) google-auth google-auth-oauthlib google-api-python-client  voor Gmail/Drive
 """
 import os
 import sys
+import math
+import random
 import threading
 import time
 import tkinter as tk
-from tkinter import ttk, messagebox
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -19,14 +33,15 @@ WORKSPACE.mkdir(parents=True, exist_ok=True)
 LLM_MODEL = "qwen2.5-coder:7b"
 OLLAMA_HOST = "http://localhost:11434"
 
-# Kleurenpalet (Iron Man / Jarvis hologram)
-BG_COLOR = "#050508"           # Diepzwart / nachtblauw
-PANEL_COLOR = "#0a0a12"       # Panel donker
-ACCENT_COLOR = "#00e5ff"      # Cyaan neon
-ACCENT_DIM = "#007a9e"        # Gedimd cyaan
-TEXT_COLOR = "#e0e0e0"        # Lichtgrijs
-DANGER_COLOR = "#ff4444"      # Rood voor fouten
-OK_COLOR = "#44ff88"          # Groen voor online
+# Iron Man kleurenpalet
+BG_COLOR = "#050a14"           # Diepnavy / bijna zwart
+PANEL_COLOR = "#0b1526"        # Panel donkerblauw
+ACCENT_COLOR = "#00d2ff"       # Cyaan neon (klassiek Jarvis)
+ACCENT_DIM = "#006a8a"         # Gedimd cyaan
+TEXT_COLOR = "#cfe3f5"         # IJsgrijs-wit
+DANGER_COLOR = "#ff3b3b"       # Waarschuwing rood
+OK_COLOR = "#3bff8c"           # Systeem groen
+GLOW_COLOR = "#1a4a6a"         # Gloei rand
 
 # ---------------------------------------------------------------------------
 # Ollama client
@@ -209,22 +224,98 @@ SYSTEM_PROMPT = (
 
 
 # ---------------------------------------------------------------------------
-# HUD Canvas helpers
+# HUD Canvas helper: hoekbrackets (Iron Man stijl)
 # ---------------------------------------------------------------------------
-def draw_corner(canvas, x, y, w, h, size=20, color=ACCENT_COLOR, width=2):
-    """Teken HUD-hoekjes (Iron Man stijl)."""
+def draw_corner_brackets(canvas, x1, y1, x2, y2, size=24, color=ACCENT_COLOR, width=2, tag="hud"):
+    """Teken hoekbrackets rond een rechthoek."""
     # Top-left
-    canvas.create_line(x, y + size, x, y, width=width, fill=color, tags="hud")
-    canvas.create_line(x, y, x + size, y, width=width, fill=color, tags="hud")
+    canvas.create_line(x1, y1 + size, x1, y1, width=width, fill=color, tags=tag)
+    canvas.create_line(x1, y1, x1 + size, y1, width=width, fill=color, tags=tag)
     # Top-right
-    canvas.create_line(x + w - size, y, x + w, y, width=width, fill=color, tags="hud")
-    canvas.create_line(x + w, y, x + w, y + size, width=width, fill=color, tags="hud")
+    canvas.create_line(x2 - size, y1, x2, y1, width=width, fill=color, tags=tag)
+    canvas.create_line(x2, y1, x2, y1 + size, width=width, fill=color, tags=tag)
     # Bottom-left
-    canvas.create_line(x, y + h - size, x, y + h, width=width, fill=color, tags="hud")
-    canvas.create_line(x, y + h, x + size, y + h, width=width, fill=color, tags="hud")
+    canvas.create_line(x1, y2 - size, x1, y2, width=width, fill=color, tags=tag)
+    canvas.create_line(x1, y2, x1 + size, y2, width=width, fill=color, tags=tag)
     # Bottom-right
-    canvas.create_line(x + w - size, y + h, x + w, y + h, width=width, fill=color, tags="hud")
-    canvas.create_line(x + w, y + h - size, x + w, y + h, width=width, fill=color, tags="hud")
+    canvas.create_line(x2 - size, y2, x2, y2, width=width, fill=color, tags=tag)
+    canvas.create_line(x2, y2 - size, x2, y2, width=width, fill=color, tags=tag)
+
+
+def draw_circular_gauge(canvas, cx, cy, radius, value, color=ACCENT_COLOR, width=4, tag="gauge"):
+    """Teken een cirkelvormige HUD-meter (0-100)."""
+    start_angle = -90
+    extent = value * 3.6  # 360 graden = 100%
+    # Achtergrondcirkel (dim)
+    canvas.create_oval(
+        cx - radius, cy - radius, cx + radius, cy + radius,
+        outline=ACCENT_DIM, width=2, tags=tag,
+    )
+    # Actieve boog
+    canvas.create_arc(
+        cx - radius, cy - radius, cx + radius, cy + radius,
+        start=start_angle, extent=extent,
+        outline=color, width=width, style=tk.ARC, tags=tag,
+    )
+    # Binnenste kern
+    canvas.create_oval(
+        cx - radius + 8, cy - radius + 8, cx + radius - 8, cy + radius - 8,
+        outline=color, width=1, tags=tag,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Deeltjes-achtergrond (Iron Man hologram deeltjes)
+# ---------------------------------------------------------------------------
+class ParticleSystem:
+    def __init__(self, canvas, width, height, count=40):
+        self.canvas = canvas
+        self.width = width
+        self.height = height
+        self.particles = []
+        self.color = ACCENT_COLOR
+        for _ in range(count):
+            self.particles.append({
+                "x": random.uniform(0, width),
+                "y": random.uniform(0, height),
+                "vx": random.uniform(-0.4, 0.4),
+                "vy": random.uniform(-0.4, 0.4),
+                "size": random.uniform(1, 3),
+                "life": random.uniform(0.5, 1.5),
+                "age": 0,
+            })
+
+    def update(self):
+        for p in self.particles:
+            p["x"] += p["vx"]
+            p["y"] += p["vy"]
+            p["age"] += 0.016
+            if p["age"] > p["life"]:
+                p["x"] = random.uniform(0, self.width)
+                p["y"] = random.uniform(0, self.height)
+                p["age"] = 0
+                p["life"] = random.uniform(0.5, 1.5)
+            # Wrap-around
+            if p["x"] < 0:
+                p["x"] = self.width
+            if p["x"] > self.width:
+                p["x"] = 0
+            if p["y"] < 0:
+                p["y"] = self.height
+            if p["y"] > self.height:
+                p["y"] = 0
+
+    def draw(self):
+        self.canvas.delete("particle")
+        for p in self.particles:
+            alpha = 1.0 - (p["age"] / p["life"])
+            # Simuleer gloei met meerdere lagen
+            size = p["size"] * (0.5 + 0.5 * alpha)
+            self.canvas.create_oval(
+                p["x"] - size, p["y"] - size,
+                p["x"] + size, p["y"] + size,
+                fill=self.color, outline=self.color, tags="particle",
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -235,12 +326,14 @@ class JarvisDesktop(tk.Tk):
         super().__init__()
 
         self.title("J.A.R.V.I.S. — HUD Interface")
-        self.geometry("1200x800")
-        self.minsize(1000, 700)
+        self.geometry("1400x900")
+        self.minsize(1100, 700)
         self.configure(bg=BG_COLOR)
 
         self.history = [{"role": "system", "content": SYSTEM_PROMPT}]
         self._anim_running = True
+        self._particles = None
+
         self._build_hud()
         self._start_hud_animation()
 
@@ -255,44 +348,63 @@ class JarvisDesktop(tk.Tk):
     # HUD layout
     # ------------------------------------------------------------------
     def _build_hud(self):
-        # Hoofdcontainer met donkere achtergrond
+        # Hoofdcontainer
         self.container = tk.Frame(self, bg=BG_COLOR)
-        self.container.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self.container.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
 
-        # Bovenste HUD-balk
-        self.top_bar = tk.Frame(self.container, bg=PANEL_COLOR, height=60)
-        self.top_bar.pack(fill=tk.X, pady=(0, 4))
+        # Canvas voor deeltjes + scannende lijnen (achter alles)
+        self.hud_canvas = tk.Canvas(
+            self.container, bg=BG_COLOR, highlightthickness=0,
+        )
+        self.hud_canvas.place(x=0, y=0, relwidth=1.0, relheight=1.0)
+
+        # Inhoudsframe bovenop de canvas
+        self.content = tk.Frame(self.container, bg=BG_COLOR)
+        self.content.place(x=0, y=0, relwidth=1.0, relheight=1.0)
+        self.content.columnconfigure(1, weight=1)
+        self.content.rowconfigure(0, weight=1)
+
+        # ---- Top HUD-balk ----
+        self.top_bar = tk.Frame(self.content, bg=PANEL_COLOR, height=70)
+        self.top_bar.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 6))
         self.top_bar.pack_propagate(False)
+        self.top_bar.columnconfigure(1, weight=1)
 
-        # Titel links
         self.title_label = tk.Label(
             self.top_bar, text="J.A.R.V.I.S.  v1.0", bg=PANEL_COLOR,
             fg=ACCENT_COLOR, font=("Courier New", 14, "bold"),
         )
-        self.title_label.pack(side=tk.LEFT, padx=16, pady=15)
+        self.title_label.grid(row=0, column=0, padx=20, pady=18, sticky="w")
 
-        # Status rechts
+        # Systeemstatus rechts
         self.status_label = tk.Label(
             self.top_bar, text="STANDBY", bg=PANEL_COLOR, fg=ACCENT_DIM,
             font=("Courier New", 11, "bold"),
         )
-        self.status_label.pack(side=tk.RIGHT, padx=20, pady=15)
+        self.status_label.grid(row=0, column=1, padx=20, pady=18, sticky="e")
 
-        # Hoekjes om de top bar
+        self.time_label = tk.Label(
+            self.top_bar, text="00:00:00", bg=PANEL_COLOR, fg=ACCENT_COLOR,
+            font=("Courier New", 12, "bold"),
+        )
+        self.time_label.grid(row=0, column=2, padx=20, pady=18, sticky="e")
+        self._tick_clock()
+
+        # Hoekbrackets rond de top bar
         self.top_canvas = tk.Canvas(
-            self.top_bar, height=60, bg=PANEL_COLOR, highlightthickness=0,
+            self.top_bar, height=70, bg=PANEL_COLOR, highlightthickness=0,
         )
         self.top_canvas.place(x=0, y=0, relwidth=1.0)
 
-        # Hoofdinhoud: links bestandbrowser, rechts chat
-        self.content = tk.Frame(self.container, bg=BG_COLOR)
-        self.content.pack(fill=tk.BOTH, expand=True)
-        self.content.columnconfigure(1, weight=1)
-        self.content.rowconfigure(0, weight=1)
+        # ---- Hoofdinhoud ----
+        self.main = tk.Frame(self.content, bg=BG_COLOR)
+        self.main.grid(row=1, column=0, columnspan=2, sticky="nsew")
+        self.main.columnconfigure(1, weight=1)
+        self.main.rowconfigure(0, weight=1)
 
-        # ---- Sidebar: werkmap ----
-        self.sidebar = tk.Frame(self.content, bg=PANEL_COLOR, width=260)
-        self.sidebar.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+        # ---- Linker zijbalk: systeem + werkmap ----
+        self.sidebar = tk.Frame(self.main, bg=PANEL_COLOR, width=320)
+        self.sidebar.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         self.sidebar.grid_propagate(False)
 
         self.sidebar_canvas = tk.Canvas(
@@ -300,34 +412,63 @@ class JarvisDesktop(tk.Tk):
         )
         self.sidebar_canvas.place(x=0, y=0, relwidth=1.0, relheight=1.0)
 
+        # Systeem-meter paneel
+        sys_panel = tk.Frame(self.sidebar, bg=PANEL_COLOR)
+        sys_panel.pack(fill=tk.X, padx=14, pady=(14, 8))
+
+        tk.Label(
+            sys_panel, text="SYSTEM STATUS", bg=PANEL_COLOR, fg=ACCENT_COLOR,
+            font=("Courier New", 9, "bold"),
+        ).pack(anchor="w", pady=(0, 6))
+
+        gauge_frame = tk.Frame(sys_panel, bg=PANEL_COLOR)
+        gauge_frame.pack(fill=tk.X)
+
+        self.cpu_gauge_canvas = tk.Canvas(gauge_frame, width=100, height=100, bg=PANEL_COLOR, highlightthickness=0)
+        self.cpu_gauge_canvas.pack(side=tk.LEFT, padx=(0, 8))
+        self.cpu_label = tk.Label(
+            gauge_frame, text="CPU: --%", bg=PANEL_COLOR, fg=TEXT_COLOR,
+            font=("Courier New", 9),
+        )
+        self.cpu_label.pack(side=tk.LEFT, anchor="w")
+
+        self.ram_gauge_canvas = tk.Canvas(gauge_frame, width=100, height=100, bg=PANEL_COLOR, highlightthickness=0)
+        self.ram_gauge_canvas.pack(side=tk.LEFT, padx=(8, 0))
+        self.ram_label = tk.Label(
+            gauge_frame, text="RAM: --%", bg=PANEL_COLOR, fg=TEXT_COLOR,
+            font=("Courier New", 9),
+        )
+        self.ram_label.pack(side=tk.LEFT, anchor="w")
+
+        # Werkmap-paneel
         tk.Label(
             self.sidebar, text="WERKMAP", bg=PANEL_COLOR, fg=ACCENT_COLOR,
-            font=("Courier New", 10, "bold"),
-        ).pack(anchor="w", padx=12, pady=(10, 4))
+            font=("Courier New", 9, "bold"),
+        ).pack(anchor="w", padx=14, pady=(14, 4))
 
         self.file_list = tk.Listbox(
             self.sidebar, bg=BG_COLOR, fg=TEXT_COLOR, selectbackground=ACCENT_COLOR,
             selectforeground="#000000", borderwidth=0, highlightthickness=0,
             font=("Consolas", 9), activestyle="none", highlightcolor=ACCENT_COLOR,
         )
-        self.file_list.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
+        self.file_list.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 8))
         self.file_list.bind("<Double-Button-1>", self._on_file_double_click)
 
         btn_frame = tk.Frame(self.sidebar, bg=PANEL_COLOR)
-        btn_frame.pack(fill=tk.X, padx=8, pady=(0, 10))
+        btn_frame.pack(fill=tk.X, padx=12, pady=(0, 14))
         tk.Button(
-            btn_frame, text="Ververs", bg=ACCENT_COLOR, fg="#000000",
+            btn_frame, text="VERSCHEN", bg=ACCENT_COLOR, fg="#000000",
             font=("Courier New", 9, "bold"), borderwidth=0,
             command=self._refresh_files,
         ).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 4))
         tk.Button(
-            btn_frame, text="Map", bg=PANEL_COLOR, fg=ACCENT_COLOR,
+            btn_frame, text="MAP", bg=PANEL_COLOR, fg=ACCENT_COLOR,
             font=("Courier New", 9, "bold"), borderwidth=1,
             highlightbackground=ACCENT_COLOR, command=self._open_workspace,
         ).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(4, 0))
 
         # ---- Chat gebied ----
-        self.chat_container = tk.Frame(self.content, bg=BG_COLOR)
+        self.chat_container = tk.Frame(self.main, bg=BG_COLOR)
         self.chat_container.grid(row=0, column=1, sticky="nsew")
         self.chat_container.columnconfigure(0, weight=1)
         self.chat_container.rowconfigure(0, weight=1)
@@ -349,9 +490,10 @@ class JarvisDesktop(tk.Tk):
         ))
 
         # ---- Inputbalk ----
-        self.input_bar = tk.Frame(self.container, bg=PANEL_COLOR, height=70)
-        self.input_bar.pack(fill=tk.X, pady=(4, 0))
+        self.input_bar = tk.Frame(self.container, bg=PANEL_COLOR, height=80)
+        self.input_bar.place(x=0, rely=1.0, anchor="sw", relwidth=1.0)
         self.input_bar.pack_propagate(False)
+        self.input_bar.columnconfigure(0, weight=1)
 
         self.entry = tk.Text(
             self.input_bar, height=3, bg=BG_COLOR, fg=TEXT_COLOR,
@@ -359,7 +501,7 @@ class JarvisDesktop(tk.Tk):
             highlightbackground=ACCENT_DIM, highlightcolor=ACCENT_COLOR,
             font=("Consolas", 11), padx=12, pady=10,
         )
-        self.entry.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=12, pady=10)
+        self.entry.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=14, pady=12)
         self.entry.bind("<Return>", self._on_enter)
         self.entry.bind("<Shift-Return>", lambda e: "break")
 
@@ -368,55 +510,78 @@ class JarvisDesktop(tk.Tk):
             font=("Courier New", 10, "bold"), borderwidth=0,
             command=self._send_message,
         )
-        self.send_btn.pack(side=tk.RIGHT, padx=12, pady=12)
+        self.send_btn.pack(side=tk.RIGHT, padx=14, pady=12)
 
-        # Onderste statusbalk
-        self.bottom_bar = tk.Frame(self.container, bg=PANEL_COLOR, height=30)
-        self.bottom_bar.pack(fill=tk.X, side=tk.BOTTOM)
+        # ---- Onderste statusbalk ----
+        self.bottom_bar = tk.Frame(self.container, bg=PANEL_COLOR, height=34)
+        self.bottom_bar.pack(side=tk.BOTTOM, fill=tk.X)
         self.bottom_bar.pack_propagate(False)
 
         self.bottom_status = tk.Label(
             self.bottom_bar, text="READY", bg=PANEL_COLOR, fg=ACCENT_DIM,
             font=("Courier New", 9),
         )
-        self.bottom_status.pack(side=tk.LEFT, padx=12, pady=6)
+        self.bottom_status.pack(side=tk.LEFT, padx=14, pady=7)
 
         self.ollama_status = tk.Label(
             self.bottom_bar, text="OLLAMA: --", bg=PANEL_COLOR, fg=ACCENT_DIM,
             font=("Courier New", 9),
         )
-        self.ollama_status.pack(side=tk.RIGHT, padx=12, pady=6)
+        self.ollama_status.pack(side=tk.RIGHT, padx=14, pady=7)
 
     # ------------------------------------------------------------------
     # HUD animatie
     # ------------------------------------------------------------------
     def _start_hud_animation(self):
+        self._particles = ParticleSystem(self.hud_canvas, self.winfo_width(), self.winfo_height())
+        self._animate_hud()
+
+    def _animate_hud(self):
         if not self._anim_running:
             return
         self._draw_hud_elements()
-        self.after(100, self._start_hud_animation)
+        self.after(33, self._animate_hud)  # ~30 FPS
 
     def _draw_hud_elements(self):
-        # Top bar hoekjes + scanning lines
-        self.top_canvas.delete("hud")
-        w = self.top_canvas.winfo_width()
-        h = self.top_canvas.winfo_height()
+        w = self.hud_canvas.winfo_width()
+        h = self.hud_canvas.winfo_height()
         if w < 10 or h < 10:
             return
-        c = ACCENT_COLOR
-        draw_corner(self.top_canvas, 0, 0, w, h, size=24, color=c, width=2)
 
-        # Scanning lijn die beweegt
-        t = time.time() * 3
-        y = int((math.sin(t) + 1) / 2 * (h - 4)) + 2
-        self.top_canvas.create_line(4, y, w - 4, y, fill=c, width=1, tags="hud")
+        # Wis alleen HUD-laag, niet deeltjes (die hebben eigen tag)
+        self.hud_canvas.delete("hud")
 
-        # Sidebar hoekjes
-        self.sidebar_canvas.delete("hud")
+        # Top bar hoekbrackets
+        draw_corner_brackets(
+            self.hud_canvas, 0, 0, w, 70, size=24, color=ACCENT_COLOR, width=2, tag="hud"
+        )
+
+        # Scannende lijn over de top bar
+        t = time.time() * 4
+        y = int((math.sin(t) + 1) / 2 * (70 - 4)) + 2
+        self.hud_canvas.create_line(4, y, w - 4, y, fill=ACCENT_COLOR, width=1, tags="hud")
+
+        # Zijbalk hoekbrackets
         sw = self.sidebar_canvas.winfo_width()
         sh = self.sidebar_canvas.winfo_height()
         if sw > 10 and sh > 10:
-            draw_corner(self.sidebar_canvas, 0, 0, sw, sh, size=16, color=c, width=1)
+            self.sidebar_canvas.delete("hud")
+            draw_corner_brackets(
+                self.sidebar_canvas, 0, 0, sw, sh, size=16, color=ACCENT_COLOR, width=1, tag="hud"
+            )
+
+        # Deeltjes updaten en tekenen
+        if self._particles:
+            self._particles.update()
+            self._particles.draw()
+
+    # ------------------------------------------------------------------
+    # Klok
+    # ------------------------------------------------------------------
+    def _tick_clock(self):
+        now = time.strftime("%H:%M:%S")
+        self.time_label.config(text=now)
+        self.after(1000, self._tick_clock)
 
     # ------------------------------------------------------------------
     # Chat helpers
@@ -426,7 +591,7 @@ class JarvisDesktop(tk.Tk):
 
     def _append_chat(self, sender: str, text: str, tag: str):
         bubble = tk.Frame(self.chat_frame, bg=BG_COLOR)
-        bubble.pack(fill=tk.X, padx=16, pady=(6, 2), anchor="e" if tag == "user" else "w")
+        bubble.pack(fill=tk.X, padx=20, pady=(8, 2), anchor="e" if tag == "user" else "w")
 
         # Naamlabel
         name_color = ACCENT_COLOR if tag == "jarvis" else TEXT_COLOR
@@ -436,20 +601,20 @@ class JarvisDesktop(tk.Tk):
         )
         name_lbl.pack(fill=tk.X)
 
-        # Tekstbal
-        bubble_bg = PANEL_COLOR if tag == "jarvis" else "#12121a"
+        # Tekstbal met holografische rand
+        bubble_bg = PANEL_COLOR if tag == "jarvis" else "#101826"
         text_lbl = tk.Label(
             bubble, text=text, bg=bubble_bg, fg=TEXT_COLOR,
             font=("Consolas", 10), anchor="w", justify=tk.LEFT,
-            padx=12, pady=10, wraplength=700,
+            padx=14, pady=11, wraplength=850,
         )
         text_lbl.pack(fill=tk.X, pady=(2, 0))
 
-        # Hoekjes om de bubble
-        cb = tk.Canvas(bubble, height=4, bg=BG_COLOR, highlightthickness=0)
+        # Gloei rand onder de bubble
+        cb = tk.Canvas(bubble, height=5, bg=BG_COLOR, highlightthickness=0)
         cb.pack(fill=tk.X)
-        cb.create_line(0, 2, 120, 2, fill=ACCENT_COLOR, width=1)
-        cb.create_line(580, 2, 700, 2, fill=ACCENT_COLOR, width=1)
+        cb.create_line(0, 2, 200, 2, fill=ACCENT_COLOR, width=1)
+        cb.create_line(700, 2, 900, 2, fill=ACCENT_COLOR, width=1)
 
         self._scroll_to_bottom()
 
@@ -531,7 +696,7 @@ class JarvisDesktop(tk.Tk):
             content = read_file(name)
             self._append_chat("Bestand", f"{name}\n{content}", "system")
         except Exception as exc:
-            messagebox.showerror("Fout", str(exc))
+            tk.messagebox.showerror("Fout", str(exc))
 
     def _open_workspace(self):
         try:
@@ -542,7 +707,7 @@ class JarvisDesktop(tk.Tk):
             else:
                 os.system(f'xdg-open "{WORKSPACE}"')
         except Exception as exc:
-            messagebox.showerror("Fout", str(exc))
+            tk.messagebox.showerror("Fout", str(exc))
 
     # ------------------------------------------------------------------
     # Ollama status
@@ -573,8 +738,6 @@ class JarvisDesktop(tk.Tk):
         self._anim_running = False
         super().destroy()
 
-
-import math  # noqa: E402  (nodig voor de HUD-animatie)
 
 if __name__ == "__main__":
     app = JarvisDesktop()

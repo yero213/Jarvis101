@@ -70,3 +70,16 @@
   - Send-knop in accentkleur
 - Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
 - Sessie afgerond
+
+### Sessie 7 – 29-10-2026
+- `Jarvis_desktop.py` volledig herwerkt naar Iron Man HUD (inspiratie uit films):
+  - Geanimeerde zwevende deeltjes-achtergrond (ParticleSystem met ~40 deeltjes)
+  - Cirkelvormige HUD-meters (CPU, RAM) met actieve boog + binnenste kern
+  - Hoekbrackets (draw_corner_brackets) rond top-balk en zijbalk
+  - Scannende radarlijn over de top-balk (beweegt heen en weer)
+  - Klok in top-rechterhoek (00:00:00 formaat)
+  - J.A.R.V.I.S. v1.0 branding met Stark Industries-stijl
+  - Chat-bubbels met holografische randen onder elke boodschap
+  - Onderste statusbalk met READY / PROCESSING / ONLINE / ERROR
+  - Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
+- Sessie afgerond
