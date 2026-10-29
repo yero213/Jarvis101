@@ -95,3 +95,14 @@
   - Translucent paneel-effect met diepte
   - Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
 - Sessie afgerond
+
+### Sessie 9 – 29-10-2026
+- `Jarvis_desktop.py` hersteld: wit scherm op macOS opgelost
+  - Canvas-achtergrond nu expliciet als rechthoek getekend (macOS render bug fix)
+  - Layout vereenvoudigd: alle widgets gebruiken pack() (geen mixing van place/grid/pack meer)
+  - Geometry-manager conflicts verwijderd die het witte scherm veroorzaakten
+  - `hud_canvas` gebruikt create_window voor content_frame boven op de deeltjes-laag
+  - `top_canvas` en `sidebar_canvas` hebben nu expliciete achtergrondrechthoeken
+  - Venster-resize werkt correct (bg_rect, top_bg bijwerken)
+  - Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
+- Sessie afgerond

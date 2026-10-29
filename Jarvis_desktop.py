@@ -38,7 +38,7 @@ OLLAMA_HOST = "http://localhost:11434"
 # Iron Man kleurenpalet (arc reactor cyaan op donkere achtergrond)
 BG_COLOR = "#03060c"           # Diepnavy / bijna zwart
 PANEL_COLOR = "#0a121f"        # Panel donkerblauw (glass morphism base)
-PANEL_BORDER = "#1a2e40"     # Subtiele paneelrand
+PANEL_BORDER = "#1a2e40"       # Subtiele paneelrand
 ACCENT_COLOR = "#00d2ff"       # Cyaan neon (klassiek Jarvis)
 ACCENT_DIM = "#006a8a"         # Gedimd cyaan
 TEXT_COLOR = "#cfe3f5"         # IJsgrijs-wit
@@ -344,22 +344,27 @@ class JarvisDesktop(tk.Tk):
         self._append_chat("Systeem", f"Werkmap: {WORKSPACE}", "system")
 
     # ------------------------------------------------------------------
-    # HUD layout
+    # HUD layout — alle widgets gebruiken pack(), geen mixing met place/grid
     # ------------------------------------------------------------------
     def _build_hud(self):
-        # Hoofdcontainer
+        # Hoofdcontainer — vul het hele venster met donkere achtergrond
         self.container = tk.Frame(self, bg=BG_COLOR)
         self.container.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+        self.container.pack_propagate(False)
 
-        # Canvas voor deeltjes + scannende lijnen (achter alles)
+        # Canvas voor deeltjes + scannende lijnen (achterlaag)
         self.hud_canvas = tk.Canvas(
             self.container, bg=BG_COLOR, highlightthickness=0,
         )
-        self.hud_canvas.place(x=0, y=0, relwidth=1.0, relheight=1.0)
+        self.hud_canvas.pack(fill=tk.BOTH, expand=True)
+        # Expliciete achtergrondrechthoek tekenen (macOS canvas bg fix)
+        self.hud_canvas.create_rectangle(
+            0, 0, 1500, 950, fill=BG_COLOR, outline=BG_COLOR, tags="bg_rect"
+        )
 
-        # Inhoudsframe bovenop de canvas
-        self.content = tk.Frame(self.container, bg=BG_COLOR)
-        self.content.place(x=0, y=0, relwidth=1.0, relheight=1.0)
+        # Inhoudsframe bovenop de canvas (transparant effect via bg=BG_COLOR)
+        self.content = tk.Frame(self.hud_canvas, bg=BG_COLOR)
+        self.hud_canvas.create_window(0, 0, window=self.content, anchor="nw", tags="content_window")
         self.content.columnconfigure(1, weight=1)
         self.content.rowconfigure(0, weight=1)
 
@@ -389,11 +394,14 @@ class JarvisDesktop(tk.Tk):
         self.time_label.grid(row=0, column=2, padx=20, pady=18, sticky="e")
         self._tick_clock()
 
-        # Hoekbrackets rond de top bar
+        # Hoekbrackets rond de top bar (getekend op canvas)
         self.top_canvas = tk.Canvas(
             self.top_bar, height=70, bg=PANEL_COLOR, highlightthickness=0,
         )
         self.top_canvas.place(x=0, y=0, relwidth=1.0)
+        self.top_canvas.create_rectangle(
+            0, 0, 1500, 70, fill=PANEL_COLOR, outline=PANEL_COLOR, tags="top_bg"
+        )
 
         # ---- Hoofdinhoud ----
         self.main = tk.Frame(self.content, bg=BG_COLOR)
@@ -411,6 +419,9 @@ class JarvisDesktop(tk.Tk):
             self.sidebar, bg=PANEL_COLOR, highlightthickness=0,
         )
         self.sidebar_canvas.place(x=0, y=0, relwidth=1.0, relheight=1.0)
+        self.sidebar_canvas.create_rectangle(
+            0, 0, 340, 950, fill=PANEL_COLOR, outline=PANEL_COLOR, tags="sidebar_bg"
+        )
 
         # Systeem-meter paneel
         sys_panel = tk.Frame(self.sidebar, bg=PANEL_COLOR)
@@ -492,7 +503,7 @@ class JarvisDesktop(tk.Tk):
         # ---- Inputbalk ----
         self.input_bar = tk.Frame(self.container, bg=PANEL_COLOR, height=80, highlightthickness=1,
                                   highlightbackground=PANEL_BORDER)
-        self.input_bar.place(x=0, rely=1.0, anchor="sw", relwidth=1.0)
+        self.input_bar.pack(side=tk.BOTTOM, fill=tk.X)
         self.input_bar.pack_propagate(False)
         self.input_bar.columnconfigure(0, weight=1)
 
@@ -531,11 +542,24 @@ class JarvisDesktop(tk.Tk):
         )
         self.ollama_status.pack(side=tk.RIGHT, padx=14, pady=7)
 
+        # Initialiseren van canvas-achtergrond bij resize
+        self.container.bind("<Configure>", self._on_resize)
+
+    def _on_resize(self, event):
+        """Bij venster-resize: achtergrondrechthoek bijwerken."""
+        w = event.width
+        h = event.height
+        self.hud_canvas.coords("bg_rect", 0, 0, w, h)
+        self.top_canvas.coords("top_bg", 0, 0, w, 70)
+        self.top_canvas.delete("hud")
+        draw_corner_brackets(
+            self.top_canvas, 0, 0, w, 70, size=24, color=ACCENT_COLOR, width=2, tag="hud"
+        )
+
     # ------------------------------------------------------------------
     # HUD animatie
     # ------------------------------------------------------------------
     def _start_hud_animation(self):
-        self._particles = ParticleSystem(self.hud_canvas, self.winfo_width(), self.winfo_height())
         self._animate_hud()
 
     def _animate_hud(self):
@@ -550,12 +574,8 @@ class JarvisDesktop(tk.Tk):
         if w < 10 or h < 10:
             return
 
+        # Wis alleen HUD-laag, niet de achtergrond
         self.hud_canvas.delete("hud")
-
-        # Top bar hoekbrackets
-        draw_corner_brackets(
-            self.hud_canvas, 0, 0, w, 70, size=24, color=ACCENT_COLOR, width=2, tag="hud"
-        )
 
         # Scannende lijn over de top bar
         t = time.time() * 4
