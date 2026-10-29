@@ -26,3 +26,14 @@
 - Git pull gedaan: repo was up to date
 - Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
 - Sessie afgerond
+
+### Sessie 3 – 29-10-2026
+- `Jarvis.py` uitgebreid met Home Assistant & Umbrel tools:
+  - `ha_states(entity_id)` — haal HA entiteitstatus op
+  - `ha_service(domain, service, entity_id)` — roep HA service aan (bijv. licht aan/uit)
+  - `umbrel_ssh(command)` — voer commando uit op Umbrel via SSH (paramiko)
+- De 3 nieuwe tools geregistreerd in `TOOLS` dictionary
+- `.env.example` bijgewerkt met HA_URL, HA_TOKEN, UMBREL_HOST, UMBREL_USER, UMBREL_SSH_KEY, UMBREL_PASSWORD
+- Alles gecommit en gepusht naar `main` op https://github.com/yero213/Jarvis101
+- `.env` (met API-key) blijft lokaal, staat in `.gitignore`
+- Sessie afgerond

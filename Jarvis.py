@@ -502,26 +502,97 @@ def drive_list(folder_id: str = "root", max_results: int = 10) -> str:
         return f"Fout bij Drive: {e}"
 
 
-# --- Home Assistant & Umbrel tools (later toe te voegen) ---
-# Voorbeelden van functies die je later kunt toevoegen:
-#
-# def ha_states(entity_id: str = "") -> str:
-#     """Haal status op van Home Assistant entiteiten."""
-#     ...
-#
-# def ha_service(domain: str, service: str, entity_id: str) -> str:
-#     """Roep een Home Assistant service aan."""
-#     ...
-#
-# def umbrel_ssh(command: str) -> str:
-#     """Voer een commando uit op je Umbrel via SSH."""
-#     ...
-#
-# Registreer ze dan in de TOOLS dictionary hieronder.
+# --- Home Assistant & Umbrel tools ---
+import requests
+
+HA_URL = os.getenv("HA_URL", "http://umbrel.local:8123")
+HA_TOKEN = os.getenv("HA_TOKEN", "")
+
+
+def ha_states(entity_id: str = "") -> str:
+    """Haal de status op van Home Assistant entiteiten (sensoren, schakelaars, lampen, enz.).
+    Geef entity_id leeg om alle entiteiten op te vragen.
+
+    Args:
+        entity_id: Optionele Home Assistant entity_id, bijvoorbeeld 'light.woonkamer'.
+    """
+    try:
+        headers = {"Authorization": f"Bearer {HA_TOKEN}"} if HA_TOKEN else {}
+        url = f"{HA_URL.rstrip('/')}/api/states/{entity_id}" if entity_id else f"{HA_URL.rstrip('/')}/api/states"
+        resp = requests.get(url, headers=headers, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        if isinstance(data, list):
+            lines = [f"{e.get('entity_id', '?')}: {e.get('state', '?')}" for e in data[:30]]
+            return "\n".join(lines) if lines else "Geen entiteiten gevonden."
+        return f"{data.get('entity_id', '?')}: {data.get('state', '?')}"
+    except Exception as e:
+        return f"Fout bij Home Assistant: {e}"
+
+
+def ha_service(domain: str, service: str, entity_id: str) -> str:
+    """Roep een Home Assistant service aan, bijvoorbeeld een lamp aanzetten.
+
+    Args:
+        domain: Domein, bijvoorbeeld 'light' of 'switch'.
+        service: Service, bijvoorbeeld 'turn_on' of 'turn_off'.
+        entity_id: Entity, bijvoorbeeld 'light.woonkamer'.
+    """
+    try:
+        headers = {
+            "Authorization": f"Bearer {HA_TOKEN}",
+            "Content-Type": "application/json",
+        } if HA_TOKEN else {}
+        url = f"{HA_URL.rstrip('/')}/api/services/{domain}/{service}"
+        payload = {"entity_id": entity_id} if entity_id else {}
+        resp = requests.post(url, headers=headers, json=payload, timeout=10)
+        resp.raise_for_status()
+        return f"{domain}.{service} uitgevoerd voor {entity_id or 'alle entities'}."
+    except Exception as e:
+        return f"Fout bij HA-service: {e}"
+
+
+def umbrel_ssh(command: str) -> str:
+    """Voer een commando uit op je Umbrel home server via SSH.
+
+    Args:
+        command: Het commando dat op de Umbrel moet worden uitgevoerd.
+    """
+    try:
+        import paramiko
+    except ImportError:
+        return "paramiko niet geïnstalleerd. Run: pip install paramiko"
+
+    host = os.getenv("UMBREL_HOST", "umbrel.local")
+    user = os.getenv("UMBREL_USER", "umbrel")
+    key_file = os.getenv("UMBREL_SSH_KEY", "") or None
+    password = os.getenv("UMBREL_PASSWORD", "")
+
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        if key_file:
+            ssh.connect(host, username=user, key_filename=key_file, timeout=10)
+        elif password:
+            ssh.connect(host, username=user, password=password, timeout=10)
+        else:
+            return "Geen SSH-sleutel of wachtwoord ingesteld voor Umbrel."
+        stdin, stdout, stderr = ssh.exec_command(command, timeout=15)
+        out = stdout.read().decode("utf-8", errors="replace")
+        err = stderr.read().decode("utf-8", errors="replace")
+        ssh.close()
+        result = out.strip()
+        if err.strip():
+            result += f"\n[stderr] {err.strip()}"
+        return result or "Commando uitgevoerd (geen output)."
+    except Exception as e:
+        return f"Fout bij Umbrel SSH: {e}"
+
 
 TOOLS = {f.__name__: f for f in (
     list_files, read_file, write_file, append_file,
     gmail_list, gmail_send, drive_list,
+    ha_states, ha_service, umbrel_ssh,
 )}
 
 
